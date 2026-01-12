@@ -212,5 +212,59 @@ app.post('/api/enrollments/add', (req, res) => {
     });
 });
 
+// Ambil materi kursus berdasarkan progres siswa
+app.get('/api/courses/:courseId/lessons', (req, res) => {
+    const { courseId } = req.params;
+    const userId = req.query.userId; // Dari Auth Context
+
+    const sql = `
+        SELECT l.*, 
+        (SELECT COUNT(*) FROM student_progress sp WHERE sp.lesson_id = l.id AND sp.user_id = ?) as isCompleted
+        FROM lessons l 
+        WHERE l.course_id = ? 
+        ORDER BY l.order_index ASC
+    `;
+    db.query(sql, [userId, courseId], (err, rows) => {
+        if (err) return res.status(500).json(err);
+        res.json(rows);
+    });
+});
+
+// Endpoint untuk menandai materi selesai dan hitung persentase otomatis
+app.post('/api/progress/complete', (req, res) => {
+    const { userId, lessonId, courseId } = req.body;
+
+    // 1. Simpan progres materi
+    const sqlInsert = "INSERT IGNORE INTO student_progress (user_id, lesson_id) VALUES (?, ?)";
+    db.query(sqlInsert, [userId, lessonId], (err) => {
+        if (err) return res.status(500).json(err);
+
+        // 2. Hitung Total Materi di Kursus tsb
+        db.query("SELECT COUNT(*) as total FROM lessons WHERE course_id = ?", [courseId], (err, resTotal) => {
+            const totalMateri = resTotal[0].total;
+
+            // 3. Hitung Materi yang sudah diselesaikan User di kursus tsb
+            const sqlCountDone = `
+                SELECT COUNT(*) as done FROM student_progress sp 
+                JOIN lessons l ON sp.lesson_id = l.id 
+                WHERE sp.user_id = ? AND l.course_id = ?
+            `;
+            db.query(sqlCountDone, [userId, courseId], (err, resDone) => {
+                const materiSelesai = resDone[0].done;
+                const persentase = Math.round((materiSelesai / totalMateri) * 100);
+
+                // 4. Update persentase di tabel enrollments
+                db.query(
+                    "UPDATE enrollments SET progress_percentage = ? WHERE user_id = ? AND course_id = ?",
+                    [persentase, userId, courseId],
+                    () => {
+                        res.json({ message: "Progres berhasil diperbarui", progress: persentase });
+                    }
+                );
+            });
+        });
+    });
+});
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Server berjalan di port ${PORT}`));
