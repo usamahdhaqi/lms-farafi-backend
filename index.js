@@ -150,6 +150,32 @@ app.post('/api/login', (req, res) => {
     });
 });
 
+app.post('/api/register', async (req, res) => {
+    const { name, email, whatsapp, password } = req.body;
+
+    // Validasi input dasar
+    if (!name || !email || !whatsapp || !password) {
+        return res.status(400).json({ message: "Semua kolom wajib diisi!" });
+    }
+
+    try {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const sql = "INSERT INTO users (name, email, whatsapp, password, role) VALUES (?, ?, ?, ?, 'siswa')";
+        
+        db.query(sql, [name, email, whatsapp, hashedPassword], (err, result) => {
+            if (err) {
+                if (err.code === 'ER_DUP_ENTRY') {
+                    return res.status(400).json({ message: "Email atau Nomor WA sudah terdaftar" });
+                }
+                return res.status(500).json({ message: "Gagal menyimpan ke database" });
+            }
+            res.status(201).json({ message: "Registrasi Berhasil" });
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Internal Server Error" });
+    }
+});
+
 // --- ENDPOINT 6: PROSES PENDAFTARAN KURSUS BARU ---
 // Pastikan rute ini yang digunakan di Frontend
 app.post('/api/enrollments/add', (req, res) => {
