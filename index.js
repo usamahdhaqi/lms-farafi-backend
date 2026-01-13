@@ -366,5 +366,30 @@ app.get('/api/admin/student-progress', (req, res) => {
     });
 });
 
+// --- ENDPOINT INSTRUKTUR: KURSUS YANG DIAJAR ---
+app.get('/api/instructor/courses/:instructorId', (req, res) => {
+    const { instructorId } = req.params;
+    const sql = "SELECT * FROM courses WHERE instructor_id = ?";
+    db.query(sql, [instructorId], (err, rows) => {
+        if (err) return res.status(500).json(err);
+        res.json(rows);
+    });
+});
+
+// --- ENDPOINT INSTRUKTUR: LIHAT SISWA DI KURSUS TERTENTU ---
+app.get('/api/instructor/students/:courseId', (req, res) => {
+    const { courseId } = req.params;
+    const sql = `
+        SELECT u.name, u.email, e.progress_percentage, e.quiz_score, e.is_passed
+        FROM enrollments e
+        JOIN users u ON e.user_id = u.id
+        WHERE e.course_id = ? AND e.payment_status = 'paid'
+    `;
+    db.query(sql, [courseId], (err, rows) => {
+        if (err) return res.status(500).json(err);
+        res.json(rows);
+    });
+});
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Server berjalan di port ${PORT}`));
