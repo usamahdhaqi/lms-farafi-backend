@@ -295,24 +295,72 @@ app.get('/api/quiz/:courseId', (req, res) => {
 
 // Endpoint untuk submit hasil kuis
 app.post('/api/quiz/submit', (req, res) => {
-    const { userId, courseId, score, isPassed } = req.body;
-    const sql = "UPDATE enrollments SET quiz_score = ?, is_passed = ? WHERE user_id = ? AND course_id = ?";
-    db.query(sql, [score, isPassed, userId, courseId], (err, result) => {
-        if (err) return res.status(500).json(err);
-        res.json({ message: "Skor berhasil disimpan" });
+    // Gunakan course_id (sesuai kiriman frontend)
+    const { userId, course_id, score, isPassed } = req.body;
+
+    if (!userId || !course_id) {
+        return res.status(400).json({ message: "Data ID User atau Kursus tidak ditemukan" });
+    }
+
+    // 1. Update skor, status lulus, DAN paksa progres ke 100%
+    const sql = `
+        UPDATE enrollments 
+        SET quiz_score = ?, is_passed = ?, progress_percentage = 100 
+        WHERE user_id = ? AND course_id = ?
+    `;
+
+    db.query(sql, [score, isPassed, userId, course_id], (err, result) => {
+        if (err) {
+            console.error("SQL Error:", err);
+            return res.status(500).json(err);
+        }
+        
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: "Data pendaftaran tidak ditemukan di database" });
+        }
+
+        res.json({ message: "Hasil ujian berhasil disimpan dan progres mencapai 100%" });
     });
 });
 
 // --- ENDPOINT: AMBIL SERTIFIKAT (KURSUS YANG LULUS) ---
 app.get('/api/certificates/user/:userId', (req, res) => {
     const { userId } = req.params;
+    
+    // Ganti e.updated_at menjadi CURRENT_TIMESTAMP jika kolom belum ada, 
+    // atau pastikan kolom tersebut sudah Anda tambahkan di database.
     const sql = `
-        SELECT e.id as cert_id, c.title as course_name, e.quiz_score, e.updated_at as date
+        SELECT 
+            e.id as cert_id, 
+            c.title as course_name, 
+            e.quiz_score, 
+            NOW() as date -- Menggunakan waktu sekarang sebagai alternatif sementara
         FROM enrollments e
         JOIN courses c ON e.course_id = c.id
         WHERE e.user_id = ? AND e.is_passed = TRUE
     `;
+
     db.query(sql, [userId], (err, rows) => {
+        if (err) {
+            console.error("Query Error:", err);
+            return res.status(500).json({ error: "Gagal mengambil data sertifikat", detail: err.message });
+        }
+        res.json(rows);
+    });
+});
+
+// Endpoint untuk memantau semua progres belajar siswa
+app.get('/api/admin/student-progress', (req, res) => {
+    const sql = `
+        SELECT 
+            e.id, u.name, u.email, c.title as course_title, 
+            e.progress_percentage, e.quiz_score, e.is_passed, e.payment_status
+        FROM enrollments e
+        JOIN users u ON e.user_id = u.id
+        JOIN courses c ON e.course_id = c.id
+        ORDER BY e.progress_percentage DESC
+    `;
+    db.query(sql, (err, rows) => {
         if (err) return res.status(500).json(err);
         res.json(rows);
     });
