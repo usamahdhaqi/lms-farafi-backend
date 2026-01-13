@@ -134,41 +134,47 @@ app.get('/api/admin/pending-payments', (req, res) => {
 // --- ENDPOINT 5: AUTH (LOGIN & REGISTER) ---
 app.post('/api/login', (req, res) => {
     const { email, password } = req.body;
-    db.query("SELECT * FROM users WHERE email = ?", [email], async (err, rows) => {
-        if (err || rows.length === 0) return res.status(401).json({ message: "Email atau Password salah" });
+    const sql = "SELECT * FROM users WHERE email = ?";
+    
+    db.query(sql, [email], async (err, result) => {
+        if (err) return res.status(500).json({ message: "Kesalahan Database" });
+        if (result.length === 0) return res.status(404).json({ message: "User tidak ditemukan" });
 
-        const user = rows[0];
+        const user = result[0];
         const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) return res.status(401).json({ message: "Email atau Password salah" });
+        
+        if (!isMatch) return res.status(401).json({ message: "Password salah" });
 
-        const token = jwt.sign({ id: user.id, role: user.role }, 'SECRET_FARAFI_2024', { expiresIn: '1d' });
-        res.json({ token, user: { id: user.id, name: user.name, role: user.role } });
+        const token = jwt.sign(
+            { id: user.id, role: user.role }, 
+            process.env.JWT_SECRET || 'secretkey', 
+            { expiresIn: '1d' }
+        );
+
+        // PASTIKAN OBJEK USER DIKIRIM LENGKAP KE FRONTEND
+        res.json({
+            token,
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role // Frontend butuh ini untuk redirect
+            }
+        });
     });
 });
 
 app.post('/api/register', async (req, res) => {
     const { name, email, whatsapp, password } = req.body;
-
-    // Validasi input dasar
-    if (!name || !email || !whatsapp || !password) {
-        return res.status(400).json({ message: "Semua kolom wajib diisi!" });
-    }
-
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
         const sql = "INSERT INTO users (name, email, whatsapp, password, role) VALUES (?, ?, ?, ?, 'siswa')";
-        
         db.query(sql, [name, email, whatsapp, hashedPassword], (err, result) => {
-            if (err) {
-                if (err.code === 'ER_DUP_ENTRY') {
-                    return res.status(400).json({ message: "Email atau Nomor WA sudah terdaftar" });
-                }
-                return res.status(500).json({ message: "Gagal menyimpan ke database" });
-            }
-            res.status(201).json({ message: "Registrasi Berhasil" });
+            if (err) return res.status(500).json({ message: "Email sudah terdaftar atau error database" });
+            res.json({ message: "Registrasi berhasil" });
         });
     } catch (error) {
-        res.status(500).json({ message: "Internal Server Error" });
+        res.status(500).json(error);
     }
 });
 
@@ -295,31 +301,21 @@ app.get('/api/quiz/:courseId', (req, res) => {
 
 // Endpoint untuk submit hasil kuis
 app.post('/api/quiz/submit', (req, res) => {
-    // Gunakan course_id (sesuai kiriman frontend)
+    // Ambil course_id (snake_case agar sinkron dengan frontend)
     const { userId, course_id, score, isPassed } = req.body;
 
-    if (!userId || !course_id) {
-        return res.status(400).json({ message: "Data ID User atau Kursus tidak ditemukan" });
-    }
-
-    // 1. Update skor, status lulus, DAN paksa progres ke 100%
     const sql = `
         UPDATE enrollments 
         SET quiz_score = ?, is_passed = ?, progress_percentage = 100 
         WHERE user_id = ? AND course_id = ?
     `;
 
-    db.query(sql, [score, isPassed, userId, course_id], (err, result) => {
+    db.query(sql, [score, isPassed ? 1 : 0, userId, course_id], (err, result) => {
         if (err) {
-            console.error("SQL Error:", err);
-            return res.status(500).json(err);
+            console.error(err);
+            return res.status(500).json({ message: "Gagal menyimpan hasil kuis" });
         }
-        
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: "Data pendaftaran tidak ditemukan di database" });
-        }
-
-        res.json({ message: "Hasil ujian berhasil disimpan dan progres mencapai 100%" });
+        res.json({ message: "Skor berhasil disimpan dan progres 100%" });
     });
 });
 
@@ -388,6 +384,17 @@ app.get('/api/instructor/students/:courseId', (req, res) => {
     db.query(sql, [courseId], (err, rows) => {
         if (err) return res.status(500).json(err);
         res.json(rows);
+    });
+});
+
+// --- ENDPOINT ADMIN: VERIFIKASI PEMBAYARAN ---
+app.post('/api/admin/verify-payment', (req, res) => {
+    const { enrollmentId } = req.body;
+    const sql = "UPDATE enrollments SET payment_status = 'paid', progress_percentage = 0 WHERE id = ?";
+    
+    db.query(sql, [enrollmentId], (err, result) => {
+        if (err) return res.status(500).json(err);
+        res.json({ message: "Pembayaran diverifikasi" });
     });
 });
 
