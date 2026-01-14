@@ -215,20 +215,11 @@ app.post('/api/enrollments/add', (req, res) => {
 });
 
 // Endpoint untuk mengambil materi berdasarkan user yang login
-app.get('/api/courses/:courseId/lessons', (req, res) => {
+app.get('/api/instructor/courses/:courseId/lessons', (req, res) => {
     const { courseId } = req.params;
-    const userId = req.query.userId; // Pastikan ini diterima dari Frontend
-
-    const sql = `
-        SELECT l.*, 
-        IF(sp.id IS NULL, 0, 1) as isCompleted 
-        FROM lessons l 
-        LEFT JOIN student_progress sp ON l.id = sp.lesson_id AND sp.user_id = ?
-        WHERE l.course_id = ? 
-        ORDER BY l.order_index ASC
-    `;
-    
-    db.query(sql, [userId, courseId], (err, rows) => {
+    // Tambahkan ORDER BY order_index ASC agar urutan konsisten
+    const sql = "SELECT * FROM lessons WHERE course_id = ? ORDER BY order_index ASC";
+    db.query(sql, [courseId], (err, rows) => {
         if (err) return res.status(500).json(err);
         res.json(rows);
     });
@@ -446,6 +437,29 @@ app.delete('/api/instructor/quiz-questions/:questionId', (req, res) => {
     db.query(sql, [questionId], (err, result) => {
         if (err) return res.status(500).json({ message: "Gagal menghapus soal" });
         res.json({ message: "Soal berhasil dihapus" });
+    });
+});
+
+// 1. Endpoint untuk Update Materi (Edit)
+app.put('/api/instructor/lessons/:id', (req, res) => {
+    const { id } = req.params;
+    const { title, type, content_url, order_index } = req.body;
+    const sql = "UPDATE lessons SET title = ?, type = ?, content_url = ?, order_index = ? WHERE id = ?";
+    
+    db.query(sql, [title, type, content_url, order_index, id], (err, result) => {
+        if (err) return res.status(500).json({ message: "Gagal memperbarui materi" });
+        res.json({ message: "Materi berhasil diperbarui" });
+    });
+});
+
+// 2. Endpoint untuk Hapus Materi
+app.delete('/api/instructor/lessons/:id', (req, res) => {
+    const { id } = req.params;
+    const sql = "DELETE FROM lessons WHERE id = ?";
+    
+    db.query(sql, [id], (err, result) => {
+        if (err) return res.status(500).json({ message: "Gagal menghapus materi" });
+        res.json({ message: "Materi berhasil dihapus" });
     });
 });
 
