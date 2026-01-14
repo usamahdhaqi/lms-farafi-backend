@@ -387,6 +387,68 @@ app.get('/api/instructor/students/:courseId', (req, res) => {
     });
 });
 
+// Mendapatkan detail materi untuk dikelola instruktur
+app.get('/api/instructor/courses/:courseId/lessons', (req, res) => {
+    const { courseId } = req.params;
+    const sql = "SELECT * FROM lessons WHERE course_id = ? ORDER BY order_index ASC";
+    db.query(sql, [courseId], (err, rows) => {
+        if (err) return res.status(500).json(err);
+        res.json(rows);
+    });
+});
+
+// Endpoint untuk menambah materi baru
+app.post('/api/instructor/lessons', (req, res) => {
+    const { course_id, title, type, content_url, order_index } = req.body;
+    
+    // Validasi data dasar
+    if (!course_id || !title || !type) {
+        return res.status(400).json({ message: "Data tidak lengkap" });
+    }
+
+    const sql = "INSERT INTO lessons (course_id, title, type, content_url, order_index) VALUES (?, ?, ?, ?, ?)";
+    db.query(sql, [course_id, title, type, content_url, order_index], (err, result) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ message: "Gagal menyimpan materi" });
+        }
+        res.json({ message: "Materi berhasil ditambahkan!", lessonId: result.insertId });
+    });
+});
+
+// Ambil semua soal untuk kursus tertentu (untuk dikelola instruktur)
+app.get('/api/instructor/quiz-questions/:courseId', (req, res) => {
+    const { courseId } = req.params;
+    const sql = "SELECT * FROM quiz_questions WHERE course_id = ? ORDER BY id DESC";
+    db.query(sql, [courseId], (err, rows) => {
+        if (err) return res.status(500).json({ message: "Gagal mengambil bank soal" });
+        res.json(rows);
+    });
+});
+
+// Tambah soal baru
+app.post('/api/instructor/quiz-questions', (req, res) => {
+    const { course_id, question, option_a, option_b, option_c, option_d, correct_option } = req.body;
+    const sql = `INSERT INTO quiz_questions 
+        (course_id, question, option_a, option_b, option_c, option_d, correct_option) 
+        VALUES (?, ?, ?, ?, ?, ?, ?)`;
+    
+    db.query(sql, [course_id, question, option_a, option_b, option_c, option_d, correct_option], (err, result) => {
+        if (err) return res.status(500).json({ message: "Gagal menyimpan soal" });
+        res.json({ message: "Soal berhasil ditambahkan!", id: result.insertId });
+    });
+});
+
+// Hapus soal
+app.delete('/api/instructor/quiz-questions/:questionId', (req, res) => {
+    const { questionId } = req.params;
+    const sql = "DELETE FROM quiz_questions WHERE id = ?";
+    db.query(sql, [questionId], (err, result) => {
+        if (err) return res.status(500).json({ message: "Gagal menghapus soal" });
+        res.json({ message: "Soal berhasil dihapus" });
+    });
+});
+
 // --- ENDPOINT ADMIN: VERIFIKASI PEMBAYARAN ---
 app.post('/api/admin/verify-payment', (req, res) => {
     const { enrollmentId } = req.body;
