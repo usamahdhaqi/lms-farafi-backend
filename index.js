@@ -340,7 +340,7 @@ app.get('/api/certificates/user/:userId', (req, res) => {
 app.get('/api/admin/student-progress', (req, res) => {
     const sql = `
         SELECT 
-            e.id, u.name, u.email, c.title as course_title, 
+            e.id, u.name, u.email, c.title as course_title, e.course_id,
             e.progress_percentage, e.quiz_score, e.is_passed, e.payment_status
         FROM enrollments e
         JOIN users u ON e.user_id = u.id
