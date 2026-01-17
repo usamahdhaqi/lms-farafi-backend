@@ -46,7 +46,13 @@ const sendWA = async (target, message) => {
 // --- [FIX] ENDPOINT 1: KATALOG KURSUS ---
 // Menggunakan /api/courses agar sinkron dengan Frontend
 app.get('/api/courses', (req, res) => {
-    const sql = "SELECT * FROM courses ORDER BY created_at DESC";
+    // Gunakan JOIN untuk mengambil nama instruktur dari tabel users
+    const sql = `
+        SELECT c.*, u.name AS instructor_name 
+        FROM courses c
+        LEFT JOIN users u ON c.instructor_id = u.id
+        ORDER BY c.created_at DESC
+    `;
     db.query(sql, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows);
@@ -471,6 +477,117 @@ app.post('/api/admin/verify-payment', (req, res) => {
     db.query(sql, [enrollmentId], (err, result) => {
         if (err) return res.status(500).json(err);
         res.json({ message: "Pembayaran diverifikasi" });
+    });
+});
+
+// Ambil daftar instruktur untuk pilihan dropdown
+app.get('/api/admin/instructors', (req, res) => {
+    const sql = "SELECT id, name FROM users WHERE role = 'instruktur'";
+    db.query(sql, (err, rows) => {
+        if (err) return res.status(500).json(err);
+        res.json(rows);
+    });
+});
+
+// --- [FIX] SIMPAN KURSUS BARU DENGAN AUTO ID ---
+app.post('/api/admin/courses', (req, res) => {
+    const { title, description, price, instructor_id, image_url, category } = req.body;
+    const customId = generateCourseId(category);
+    
+    const sql = `
+        INSERT INTO courses (id, title, description, price, instructor_id, image_url, category) 
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    `;
+    
+    db.query(sql, [customId, title, description, price, instructor_id, image_url, category], (err, result) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: "Kursus berhasil dibuat!", courseId: customId });
+    });
+});
+
+// Endpoint untuk Update Kursus
+app.put('/api/admin/courses/:id', (req, res) => {
+    const { id } = req.params;
+    const { title, description, price, instructor_id, image_url } = req.body;
+    
+    const sql = `
+        UPDATE courses 
+        SET title = ?, description = ?, price = ?, instructor_id = ?, image_url = ? 
+        WHERE id = ?
+    `;
+    db.query(sql, [title, description, price, instructor_id, image_url, id], (err, result) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: "Kursus berhasil diperbarui" });
+    });
+});
+
+// Endpoint untuk Hapus Kursus
+app.delete('/api/admin/courses/:id', (req, res) => {
+    const { id } = req.params;
+    const sql = "DELETE FROM courses WHERE id = ?";
+    db.query(sql, [id], (err, result) => {
+        if (err) return res.status(500).json({ message: "Gagal menghapus kursus" });
+        res.json({ message: "Kursus berhasil dihapus" });
+    });
+});
+
+// Fungsi Helper untuk generate ID dengan Inisial Kategori
+const generateCourseId = (category) => {
+    let prefix = "CRS"; // Default
+    
+    // Logika penentuan prefix berdasarkan kategori
+    switch (category) {
+        case "Administrasi":
+            prefix = "ADM";
+            break;
+        case "RPL":
+            prefix = "PROG"; // Rekayasa Perangkat Lunak -> Programmer
+            break;
+        case "Desain Grafis":
+            prefix = "DSGN";
+            break;
+        case "Drone":
+            prefix = "DRN";
+            break;
+        case "Komputer":
+            prefix = "COMP";
+            break;
+        case "Teknisi":
+            prefix = "TEK";
+            break;
+    }
+    
+    const randomNum = Math.floor(1000 + Math.random() * 9000); 
+    return `${prefix}-${randomNum}`;
+};
+
+// Ambil semua daftar pengguna
+app.get('/api/admin/users', (req, res) => {
+    const sql = "SELECT id, name, email, role, created_at FROM users ORDER BY created_at DESC";
+    db.query(sql, (err, rows) => {
+        if (err) return res.status(500).json(err);
+        res.json(rows);
+    });
+});
+
+// Update Role Pengguna (Siswa <-> Instruktur)
+app.put('/api/admin/users/:id/role', (req, res) => {
+    const { id } = req.params;
+    const { role } = req.body;
+    const sql = "UPDATE users SET role = ? WHERE id = ?";
+    db.query(sql, [role, id], (err, result) => {
+        if (err) return res.status(500).json(err);
+        res.json({ message: "Role berhasil diperbarui" });
+    });
+});
+
+// Hapus Pengguna
+app.delete('/api/admin/users/:id', (req, res) => {
+    const { id } = req.params;
+    const sql = "DELETE FROM users WHERE id = ?";
+    db.query(sql, [id], (err, result) => {
+        if (err) return res.status(500).json(err);
+        res.json({ message: "Pengguna berhasil dihapus" });
     });
 });
 
