@@ -83,16 +83,25 @@ app.post('/api/enrollments/register', (req, res) => {
 app.get('/api/enrollments/user/:userId', (req, res) => {
     const { userId } = req.params;
     
-    // Query untuk mengambil data kursus beserta persentase progresnya
+    // Gunakan JOIN u2 untuk mengambil nama instruktur dari tabel users
     const sql = `
-        SELECT e.id, e.course_id, e.payment_status, e.progress_percentage, c.title, c.instructor 
+        SELECT 
+            e.*, 
+            c.title, 
+            c.description, 
+            u2.name AS instructor_name,  -- Mengambil nama asli instruktur
+            c.image_url
         FROM enrollments e
         JOIN courses c ON e.course_id = c.id
+        LEFT JOIN users u2 ON c.instructor_id = u2.id -- Relasi ke instruktur
         WHERE e.user_id = ?
     `;
 
     db.query(sql, [userId], (err, rows) => {
-        if (err) return res.status(500).json(err);
+        if (err) {
+            console.error("❌ SQL Error Detail:", err.message); // Cek ini di terminal server Anda
+            return res.status(500).json({ error: err.message });
+        }
         res.json(rows);
     });
 });
@@ -124,15 +133,29 @@ app.post('/api/payments/verify/:enrollmentId', (req, res) => {
 
 // Ambil daftar pembayaran yang statusnya 'pending'
 app.get('/api/admin/pending-payments', (req, res) => {
+    // Pastikan semua kolom menggunakan alias tabel (e untuk enrollments, u untuk users, c untuk courses)
     const sql = `
-        SELECT e.id, u.name as student_name, u.email, c.title as course_title, e.payment_method, c.price
+        SELECT 
+            e.id, 
+            u.name AS student_name, 
+            u.email, 
+            c.title AS course_title, 
+            c.price,              -- Pastikan mengambil price dari tabel courses
+            e.payment_method, 
+            e.payment_status,
+            e.updated_at
         FROM enrollments e
         JOIN users u ON e.user_id = u.id
         JOIN courses c ON e.course_id = c.id
         WHERE e.payment_status = 'pending'
+        ORDER BY e.updated_at DESC
     `;
+
     db.query(sql, (err, rows) => {
-        if (err) return res.status(500).json(err);
+        if (err) {
+            console.error("❌ Error pada Pending Payments:", err.message); // Cek pesan error ini di terminal backend
+            return res.status(500).json({ error: err.message });
+        }
         res.json(rows);
     });
 });
