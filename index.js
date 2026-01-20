@@ -660,29 +660,28 @@ app.put('/api/instructor/lessons/reorder', async (req, res) => {
     const { sortedIds } = req.body;
 
     if (!sortedIds || !Array.isArray(sortedIds)) {
-        return res.status(400).json({ error: "Data sortedIds harus berupa array." });
+        return res.status(400).json({ error: "Data sortedIds tidak valid." });
     }
 
     try {
-        // Gunakan Promise.all untuk eksekusi yang lebih cepat
-        const updatePromises = sortedIds.map((id, index) => {
-            return new Promise((resolve, reject) => {
+        // Proses update satu per satu secara berurutan
+        for (let i = 0; i < sortedIds.length; i++) {
+            const id = sortedIds[i];
+            const newIndex = i + 1;
+            
+            await new Promise((resolve, reject) => {
                 const sql = "UPDATE lessons SET order_index = ? WHERE id = ?";
-                // index + 1 karena urutan manusia mulai dari 1
-                db.query(sql, [index + 1, id], (err, result) => {
+                db.query(sql, [newIndex, id], (err, result) => {
                     if (err) return reject(err);
                     resolve(result);
                 });
             });
-        });
+        }
 
-        await Promise.all(updatePromises);
         res.json({ message: "Urutan materi berhasil diperbarui!" });
-        
     } catch (error) {
-        console.error("❌ SQL Reorder Error:", error.message);
-        // Mengirimkan pesan error spesifik ke frontend untuk debugging
-        res.status(500).json({ error: "Gagal memperbarui urutan: " + error.message });
+        console.error("❌ Database Reorder Error:", error.message);
+        res.status(500).json({ error: "Gagal memperbarui urutan materi di database." });
     }
 });
 
