@@ -8,6 +8,10 @@ require('dotenv').config();
 
 const app = express();
 
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
 // --- MIDDLEWARE ---
 app.use(cors());
 app.use(express.json());
@@ -42,6 +46,28 @@ const sendWA = async (target, message) => {
         console.error('Gagal kirim WA:', err.message);
     }
 };
+
+// Pastikan folder 'uploads' ada
+const uploadDir = 'uploads';
+if (!fs.existsSync(uploadDir)){
+    fs.mkdirSync(uploadDir);
+}
+
+// Konfigurasi Penyimpanan Multer
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'uploads/');
+    },
+    filename: (req, file, cb) => {
+        // Beri nama unik: timestamp-namaasli
+        cb(null, Date.now() + '-' + file.originalname);
+    }
+});
+
+const upload = multer({ storage: storage });
+
+// Daftarkan folder uploads agar bisa diakses via browser
+app.use('/uploads', express.static('uploads'));
 
 // --- [FIX] ENDPOINT 1: KATALOG KURSUS ---
 // Menggunakan /api/courses agar sinkron dengan Frontend
@@ -409,31 +435,25 @@ app.get('/api/instructor/students/:courseId', (req, res) => {
 });
 
 // Mendapatkan detail materi untuk dikelola instruktur
-app.get('/api/instructor/courses/:courseId/lessons', (req, res) => {
-    const { courseId } = req.params;
-    const sql = "SELECT * FROM lessons WHERE course_id = ? ORDER BY order_index ASC";
-    db.query(sql, [courseId], (err, rows) => {
-        if (err) return res.status(500).json(err);
-        res.json(rows);
-    });
-});
-
-// Endpoint untuk menambah materi baru
-app.post('/api/instructor/lessons', (req, res) => {
-    const { course_id, title, type, content_url, order_index } = req.body;
+app.post('/api/instructor/lessons', upload.single('file'), (req, res) => {
+    const { title, type, course_id, order_index, content_url } = req.body;
     
-    // Validasi data dasar
-    if (!course_id || !title || !type) {
-        return res.status(400).json({ message: "Data tidak lengkap" });
-    }
+    // Jika ada file yang diupload, gunakan path file tersebut. Jika tidak, gunakan content_url (link video)
+    const finalContentUrl = req.file 
+        ? `http://localhost:5000/uploads/${req.file.filename}` 
+        : content_url;
 
-    const sql = "INSERT INTO lessons (course_id, title, type, content_url, order_index) VALUES (?, ?, ?, ?, ?)";
-    db.query(sql, [course_id, title, type, content_url, order_index], (err, result) => {
+    const sql = `
+        INSERT INTO lessons (title, type, content_url, course_id, order_index) 
+        VALUES (?, ?, ?, ?, ?)
+    `;
+
+    db.query(sql, [title, type, finalContentUrl, course_id, order_index], (err, result) => {
         if (err) {
-            console.error(err);
-            return res.status(500).json({ message: "Gagal menyimpan materi" });
+            console.error("❌ SQL Error:", err.message);
+            return res.status(500).json({ error: err.message });
         }
-        res.json({ message: "Materi berhasil ditambahkan!", lessonId: result.insertId });
+        res.json({ message: "Materi berhasil disimpan!", id: result.insertId });
     });
 });
 
@@ -633,6 +653,37 @@ app.put('/api/admin/update-password', (req, res) => {
         if (err) return res.status(500).json(err);
         res.json({ message: "Password berhasil diganti!" });
     });
+});
+
+// Endpoint untuk Bulk Update Urutan Materi
+app.put('/api/instructor/lessons/reorder', async (req, res) => {
+    const { sortedIds } = req.body;
+
+    if (!sortedIds || !Array.isArray(sortedIds)) {
+        return res.status(400).json({ error: "Data sortedIds harus berupa array." });
+    }
+
+    try {
+        // Gunakan Promise.all untuk eksekusi yang lebih cepat
+        const updatePromises = sortedIds.map((id, index) => {
+            return new Promise((resolve, reject) => {
+                const sql = "UPDATE lessons SET order_index = ? WHERE id = ?";
+                // index + 1 karena urutan manusia mulai dari 1
+                db.query(sql, [index + 1, id], (err, result) => {
+                    if (err) return reject(err);
+                    resolve(result);
+                });
+            });
+        });
+
+        await Promise.all(updatePromises);
+        res.json({ message: "Urutan materi berhasil diperbarui!" });
+        
+    } catch (error) {
+        console.error("❌ SQL Reorder Error:", error.message);
+        // Mengirimkan pesan error spesifik ke frontend untuk debugging
+        res.status(500).json({ error: "Gagal memperbarui urutan: " + error.message });
+    }
 });
 
 const PORT = process.env.PORT || 5000;
