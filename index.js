@@ -374,6 +374,7 @@ app.get('/api/admin/student-progress', (req, res) => {
         FROM enrollments e
         JOIN users u ON e.user_id = u.id
         JOIN courses c ON e.course_id = c.id
+        WHERE e.payment_status = 'paid'
         ORDER BY e.progress_percentage DESC
     `;
     db.query(sql, (err, rows) => {
@@ -611,6 +612,26 @@ app.delete('/api/admin/users/:id', (req, res) => {
     db.query(sql, [id], (err, result) => {
         if (err) return res.status(500).json(err);
         res.json({ message: "Pengguna berhasil dihapus" });
+    });
+});
+
+// Update Profil Admin
+app.put('/api/admin/update-profile', (req, res) => {
+    const { id, name, email } = req.body;
+    const sql = "UPDATE users SET name = ?, email = ? WHERE id = ?";
+    db.query(sql, [name, email, id], (err, result) => {
+        if (err) return res.status(500).json(err);
+        res.json({ message: "Profil diperbarui!" });
+    });
+});
+
+// Update Password (Sederhana)
+app.put('/api/admin/update-password', (req, res) => {
+    const { id, newPassword } = req.body;
+    const sql = "UPDATE users SET password = ? WHERE id = ?";
+    db.query(sql, [newPassword, id], (err, result) => {
+        if (err) return res.status(500).json(err);
+        res.json({ message: "Password berhasil diganti!" });
     });
 });
 
