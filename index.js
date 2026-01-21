@@ -21,7 +21,7 @@ app.use('/uploads', express.static('uploads'));
 const db = mysql.createConnection({
     host: process.env.DB_HOST || 'localhost',
     user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '@Dhylhq123', // Password sesuai file Anda
+    password: process.env.DB_PASSWORD || '@Dhylhq123',
     database: process.env.DB_NAME || 'lms_lpk_farafi'
 });
 
@@ -457,6 +457,70 @@ app.post('/api/instructor/lessons', upload.single('file'), (req, res) => {
     });
 });
 
+// Endpoint untuk Bulk Update Urutan Materi
+app.put('/api/instructor/lessons/reorder', (req, res) => {
+    console.log("📢 REQUEST MASUK KE BACKEND!"); // Jika ini tidak muncul, berarti rute salah
+    
+    const { sortedIds } = req.body;
+    console.log("📦 Body Data:", sortedIds);
+
+    if (!sortedIds || !Array.isArray(sortedIds)) {
+        console.log("❌ Validasi Gagal: sortedIds bukan array");
+        return res.status(400).json({ error: "Data tidak valid" });
+    }
+
+    // Gunakan fungsi recursive sederhana untuk menjamin urutan
+    let i = 0;
+    const updateOneByOne = () => {
+        if (i >= sortedIds.length) {
+            console.log("✅ SEMUA ID BERHASIL DIUPDATE");
+            return res.json({ success: true });
+        }
+
+        const id = sortedIds[i];
+        const newOrder = i + 1;
+
+        console.log(`Update ID ${id} -> Order ${newOrder}`);
+
+        db.query("UPDATE lessons SET order_index = ? WHERE id = ?", [newOrder, id], (err) => {
+            if (err) {
+                console.error("❌ SQL ERROR DI DALAM LOOP:", err.message);
+                return res.status(500).json({ error: err.message });
+            }
+            i++;
+            updateOneByOne();
+        });
+    };
+
+    updateOneByOne();
+});
+
+// Endpoint untuk Update/Edit Materi (Mendukung upload file baru atau ganti link)
+app.put('/api/instructor/lessons/:id', upload.single('file'), (req, res) => {
+    const { id } = req.params;
+    const { title, type, content_url, order_index } = req.body;
+    
+    // Logika penentuan URL: Gunakan file baru jika ada, jika tidak gunakan URL lama
+    let finalContentUrl = content_url;
+    if (req.file) {
+        finalContentUrl = `http://localhost:5000/uploads/${req.file.filename}`;
+    }
+
+    const sql = `
+        UPDATE lessons 
+        SET title = ?, type = ?, content_url = ?, order_index = ? 
+        WHERE id = ?
+    `;
+
+    db.query(sql, [title, type, finalContentUrl, order_index, id], (err, result) => {
+        if (err) {
+            console.error("❌ SQL Edit Error:", err.message);
+            return res.status(500).json({ error: "Gagal memperbarui materi" });
+        }
+        res.json({ message: "Materi berhasil diperbarui!" });
+    });
+});
+
 // Ambil semua soal untuk kursus tertentu (untuk dikelola instruktur)
 app.get('/api/instructor/quiz-questions/:courseId', (req, res) => {
     const { courseId } = req.params;
@@ -653,36 +717,6 @@ app.put('/api/admin/update-password', (req, res) => {
         if (err) return res.status(500).json(err);
         res.json({ message: "Password berhasil diganti!" });
     });
-});
-
-// Endpoint untuk Bulk Update Urutan Materi
-app.put('/api/instructor/lessons/reorder', async (req, res) => {
-    const { sortedIds } = req.body;
-
-    if (!sortedIds || !Array.isArray(sortedIds)) {
-        return res.status(400).json({ error: "Data sortedIds tidak valid." });
-    }
-
-    try {
-        // Proses update satu per satu secara berurutan
-        for (let i = 0; i < sortedIds.length; i++) {
-            const id = sortedIds[i];
-            const newIndex = i + 1;
-            
-            await new Promise((resolve, reject) => {
-                const sql = "UPDATE lessons SET order_index = ? WHERE id = ?";
-                db.query(sql, [newIndex, id], (err, result) => {
-                    if (err) return reject(err);
-                    resolve(result);
-                });
-            });
-        }
-
-        res.json({ message: "Urutan materi berhasil diperbarui!" });
-    } catch (error) {
-        console.error("❌ Database Reorder Error:", error.message);
-        res.status(500).json({ error: "Gagal memperbarui urutan materi di database." });
-    }
 });
 
 const PORT = process.env.PORT || 5000;
