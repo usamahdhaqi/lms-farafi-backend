@@ -85,6 +85,59 @@ app.get('/api/courses', (req, res) => {
     });
 });
 
+// Endpoint untuk siswa mengambil daftar materi beserta status selesainya
+app.get('/api/courses/:courseId/lessons', (req, res) => {
+    const { courseId } = req.params;
+    const { userId } = req.query; // Ambil userId dari query string
+
+    // Query untuk mengambil materi dan cek apakah user sudah menyelesaikannya
+    const sql = `
+        SELECT l.*, 
+        (SELECT COUNT(*) FROM student_progress sp WHERE sp.lesson_id = l.id AND sp.user_id = ?) as is_completed
+        FROM lessons l
+        WHERE l.course_id = ?
+        ORDER BY l.order_index ASC
+    `;
+
+    db.query(sql, [userId, courseId], (err, rows) => {
+        if (err) {
+            console.error("❌ SQL Error Student Lessons:", err.message);
+            return res.status(500).json({ error: err.message });
+        }
+        
+        if (rows.length === 0) {
+            // Berikan array kosong jika belum ada materi, jangan 404 agar frontend tidak crash
+            return res.json([]);
+        }
+
+        res.json(rows);
+    });
+});
+
+// Route untuk mengambil materi kursus beserta status progres user
+app.get('/api/courses/:courseId/lessons', (req, res) => {
+  const { courseId } = req.params;
+  const { userId } = req.query; // Diambil dari query parameter ?userId=...
+
+  // Query SQL untuk menggabungkan data materi dengan progres dari tabel student_progress
+  const sql = `
+    SELECT 
+      l.*, 
+      IFNULL(sp.is_completed, 0) AS isCompleted 
+    FROM lessons l
+    LEFT JOIN student_progress sp ON l.id = sp.lesson_id AND sp.user_id = ?
+    WHERE l.course_id = ?
+    ORDER BY l.order_number ASC
+  `;
+
+  db.query(sql, [userId, courseId], (err, results) => {
+    if (err) {
+      return res.status(500).json({ error: "Gagal mengambil data materi" });
+    }
+    res.json(results);
+  });
+});
+
 // --- [NEW] ENDPOINT 2: PENDAFTARAN KURSUS BARU (DARI DASHBOARD) ---
 // Digunakan saat siswa klik "Tambah Kursus"
 app.post('/api/enrollments/register', (req, res) => {
@@ -534,13 +587,15 @@ app.get('/api/instructor/quiz-questions/:courseId', (req, res) => {
 // Tambah soal baru
 app.post('/api/instructor/quiz-questions', (req, res) => {
     const { course_id, question, option_a, option_b, option_c, option_d, correct_option } = req.body;
+    
+    // correct_option akan berisi 'a', 'b', 'c', atau 'd' dari frontend
     const sql = `INSERT INTO quiz_questions 
         (course_id, question, option_a, option_b, option_c, option_d, correct_option) 
         VALUES (?, ?, ?, ?, ?, ?, ?)`;
     
     db.query(sql, [course_id, question, option_a, option_b, option_c, option_d, correct_option], (err, result) => {
-        if (err) return res.status(500).json({ message: "Gagal menyimpan soal" });
-        res.json({ message: "Soal berhasil ditambahkan!", id: result.insertId });
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: "Soal berhasil ditambahkan!" });
     });
 });
 
