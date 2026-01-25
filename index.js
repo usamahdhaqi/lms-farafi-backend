@@ -609,6 +609,21 @@ app.delete('/api/instructor/quiz-questions/:questionId', (req, res) => {
     });
 });
 
+app.put('/api/instructor/questions/:id/correct-option', (req, res) => {
+    const { id } = req.params;
+    const { correct_option } = req.body;
+
+    const sql = "UPDATE quiz_questions SET correct_option = ? WHERE id = ?";
+    
+    db.query(sql, [correct_option, id], (err, result) => {
+        if (err) {
+            console.error("❌ SQL Error:", err);
+            return res.status(500).json({ error: "Gagal memperbarui kunci jawaban" });
+        }
+        res.json({ message: "Kunci jawaban berhasil diperbarui" });
+    });
+});
+
 // 1. Endpoint untuk Update Materi (Edit)
 app.put('/api/instructor/lessons/:id', (req, res) => {
     const { id } = req.params;
