@@ -700,13 +700,19 @@ app.put('/api/admin/courses/:id', (req, res) => {
 });
 
 // Endpoint untuk Hapus Kursus
-app.delete('/api/admin/courses/:id', (req, res) => {
+app.delete('/api/admin/courses/:id', async (req, res) => {
+  try {
     const { id } = req.params;
-    const sql = "DELETE FROM courses WHERE id = ?";
-    db.query(sql, [id], (err, result) => {
-        if (err) return res.status(500).json({ message: "Gagal menghapus kursus" });
-        res.json({ message: "Kursus berhasil dihapus" });
-    });
+    await db.query("DELETE FROM courses WHERE id = ?", [id]);
+    res.json({ message: "Berhasil dihapus" });
+  } catch (error) {
+    if (error.code === 'ER_ROW_IS_REFERENCED_2') {
+      return res.status(400).json({ 
+        message: "Tidak dapat menghapus kursus yang memiliki siswa aktif." 
+      });
+    }
+    res.status(500).json({ message: "Terjadi kesalahan server." });
+  }
 });
 
 // Fungsi Helper untuk generate ID dengan Inisial Kategori
