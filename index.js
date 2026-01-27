@@ -185,6 +185,34 @@ app.get('/api/enrollments/user/:userId', (req, res) => {
     });
 });
 
+// 1. Endpoint untuk AMBIL data profil (Mengatasi Error 404 GET)
+app.get('/api/users/profile/:id', (req, res) => {
+    const { id } = req.params;
+    const sql = "SELECT id, name, email, whatsapp, role, created_at FROM users WHERE id = ?";
+    
+    db.query(sql, [id], (err, results) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (results.length === 0) return res.status(404).json({ message: "User tidak ditemukan" });
+        res.json(results[0]);
+    });
+});
+
+// 2. Endpoint untuk UPDATE data profil (Mendukung tombol Simpan di StudentProfile.jsx)
+app.put('/api/users/profile/:id', (req, res) => {
+    const { id } = req.params;
+    const { name, whatsapp } = req.body; // Mengambil data name & whatsapp dari formData
+
+    const sql = "UPDATE users SET name = ?, whatsapp = ? WHERE id = ?";
+    
+    db.query(sql, [name, whatsapp, id], (err, result) => {
+        if (err) {
+            console.error("❌ Gagal update profil:", err.message);
+            return res.status(500).json({ error: "Gagal memperbarui profil di database" });
+        }
+        res.json({ message: "Profil berhasil diperbarui!" });
+    });
+});
+
 // --- ENDPOINT 4: VERIFIKASI PEMBAYARAN (ADMIN) ---
 app.post('/api/payments/verify/:enrollmentId', (req, res) => {
     const { enrollmentId } = req.params;
@@ -747,7 +775,7 @@ const generateCourseId = (category) => {
 
 // Ambil semua daftar pengguna
 app.get('/api/admin/users', (req, res) => {
-    const sql = "SELECT id, name, email, role, created_at FROM users ORDER BY created_at DESC";
+    const sql = "SELECT id, name, email, role, created_at, is_active FROM users ORDER BY created_at DESC";
     db.query(sql, (err, rows) => {
         if (err) return res.status(500).json(err);
         res.json(rows);
@@ -773,6 +801,18 @@ app.delete('/api/admin/users/:id', (req, res) => {
         if (err) return res.status(500).json(err);
         res.json({ message: "Pengguna berhasil dihapus" });
     });
+});
+
+// Endpoint Backend (Status Update)
+app.put('/api/admin/users/:id/status', async (req, res) => {
+  const { is_active } = req.body;
+  const { id } = req.params;
+  
+  // Query untuk update kolom is_active di tabel users
+  db.query("UPDATE users SET is_active = ? WHERE id = ?", [is_active, id], (err) => {
+    if (err) return res.status(500).send(err);
+    res.json({ message: "Status diperbarui" });
+  });
 });
 
 // Update Profil Admin
